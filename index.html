@@ -1,0 +1,1787 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Radio Zodi Network</title>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            touch-action: manipulation;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            display: flex;
+            justify-content: center;
+            /* ============ FONDO ESTILO RADIO FM ESTÉREO ============ */
+            background:
+                radial-gradient(circle at 15% 15%, rgba(0, 212, 255, 0.18), transparent 45%),
+                radial-gradient(circle at 85% 85%, rgba(0, 119, 200, 0.22), transparent 50%),
+                radial-gradient(circle at 80% 10%, rgba(0, 168, 204, 0.12), transparent 40%),
+                repeating-linear-gradient(90deg, rgba(0, 212, 255, 0.045) 0px, rgba(0, 212, 255, 0.045) 5px, transparent 5px, transparent 34px),
+                repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0px, rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 60px),
+                linear-gradient(160deg, #02090f 0%, #0b1e28 45%, #06304a 100%);
+        }
+
+        /* Líneas de brillo tipo display de estéreo */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #00d4ff, #00a8cc, transparent);
+            opacity: 0.6;
+            z-index: 0;
+        }
+
+        body::after {
+            content: "";
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #0077c8, #00d4ff, transparent);
+            opacity: 0.6;
+            z-index: 0;
+        }
+
+        .main-container {
+            width: 100%;
+            max-width: 500px;
+            height: 100%;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+            box-shadow: 0 0 60px rgba(0, 212, 255, 0.15), 0 0 120px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Barra Superior */
+        .top-nav {
+            background-color: #f5f5f5;
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 10px;
+            border-bottom: 1px solid #e0e0e0;
+            position: relative;
+            z-index: 10;
+            flex-shrink: 0;
+        }
+
+        .nav-item {
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #1a4a5e;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            text-transform: uppercase;
+            user-select: none;
+        }
+
+        .nav-item:hover {
+            color: #0077c8;
+        }
+
+        /* Paneles Desplegables */
+        .dropdown-panel {
+            display: none;
+            background-color: #ffffff;
+            border-bottom: 2px solid #0077c8;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            padding: 10px 15px;
+            position: absolute;
+            top: 45px;
+            left: 0;
+            width: 100%;
+            z-index: 9;
+        }
+
+        .dropdown-panel.active {
+            display: block;
+        }
+
+        .dropdown-panel h4 {
+            font-size: 0.85rem;
+            color: #0d2836;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 4px;
+        }
+
+        .panel-list {
+            list-style: none;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .panel-item {
+            padding: 8px 10px;
+            font-size: 0.85rem;
+            color: #333;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-item:hover {
+            background-color: #f0f7ff;
+            color: #0077c8;
+        }
+
+        .empty-msg {
+            font-size: 0.8rem;
+            color: #888;
+            font-style: italic;
+            padding: 5px 0;
+        }
+
+        /* Sección del Logo */
+        .station-header {
+            text-align: center;
+            padding: 10px 20px 2px;
+            flex-shrink: 0;
+        }
+
+        .station-logo {
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: #0077c8;
+            font-style: italic;
+            letter-spacing: -1px;
+            line-height: 1;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .station-logo span {
+            font-size: 1.1rem;
+            display: block;
+            color: #333;
+            font-style: normal;
+        }
+
+        .station-title {
+            margin-top: 6px;
+            font-size: 1.2rem;
+            color: #0d2836;
+            font-weight: bold;
+        }
+
+        /* Frecuencia + Contador de Oyentes */
+        .station-freq {
+            color: #1a4a5e;
+            font-size: 0.85rem;
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        .listener-badge {
+            background-color: #e6f4ea;
+            color: #137333;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            border: 1px solid #ceead6;
+            transition: all 0.3s ease;
+        }
+
+        .listener-badge.offline {
+            background-color: #fce8e6;
+            color: #c5221f;
+            border-color: #fad2cf;
+        }
+
+        .pulse-dot {
+            width: 6px;
+            height: 6px;
+            background-color: #34a853;
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.7);
+            animation: pulse-green 1.5s infinite;
+        }
+
+        .listener-badge.offline .pulse-dot {
+            background-color: #d93025;
+            animation: none;
+            box-shadow: none;
+        }
+
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(52, 168, 83, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 168, 83, 0); }
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #d9534f;
+            display: none;
+            margin-top: 4px;
+        }
+
+        /* Badge VOZ EN VIVO */
+        .live-voice-badge {
+            display: none;
+            margin-top: 6px;
+            background-color: #d93025;
+            color: #ffffff;
+            font-size: 0.75rem;
+            font-weight: 800;
+            padding: 4px 12px;
+            border-radius: 12px;
+            letter-spacing: 0.5px;
+            animation: liveBlink 1.2s ease-in-out infinite;
+        }
+
+        @keyframes liveBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.55; }
+        }
+
+        /* Reproductor Oscuro */
+        .player-card {
+            background-color: #04212e;
+            margin: 8px 15px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            flex-shrink: 0;
+            padding: 10px 15px;
+        }
+
+        .controls-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .play-btn {
+            width: 45px;
+            height: 45px;
+            background-color: #ffffff;
+            border-radius: 50%;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .play-btn svg {
+            width: 22px;
+            height: 22px;
+            fill: #00a8cc;
+        }
+
+        .volume-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-grow: 1;
+        }
+
+        .volume-box svg {
+            width: 20px;
+            height: 20px;
+            fill: #00a8cc;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .volume-slider {
+            flex-grow: 1;
+            -webkit-appearance: none;
+            height: 6px;
+            background: #0088aa;
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #00d4ff;
+            cursor: pointer;
+            box-shadow: 0 0 4px rgba(0,0,0,0.4);
+        }
+
+        /* Sección de Chat en Vivo */
+        .chat-section {
+            padding: 5px 15px 10px;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #0d2836;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .chat-header span {
+            font-size: 0.75rem;
+            color: #28a745;
+            font-weight: 600;
+        }
+
+        .chat-box {
+            background-color: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .chat-msg {
+            background-color: #ffffff;
+            border: 1px solid #eee;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+            word-break: break-word;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .chat-msg .author {
+            font-weight: 700;
+            color: #0077c8;
+            margin-right: 5px;
+        }
+
+        .chat-msg .time {
+            font-size: 0.7rem;
+            color: #999;
+            float: right;
+        }
+
+        .chat-inputs {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .chat-inputs-row {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .chat-username {
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            outline: none;
+            width: 90px;
+            flex-shrink: 0;
+        }
+
+        .chat-message-container {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            gap: 6px;
+        }
+
+        .chat-message-input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        .chat-username:focus, .chat-message-input:focus {
+            border-color: #0077c8;
+        }
+
+        .chat-send-btn {
+            background-color: #0077c8;
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 16px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            align-self: flex-start;
+        }
+
+        .chat-send-btn:hover {
+            background-color: #005fa3;
+        }
+
+        /* Ticker Inferior */
+        .ticker-bar {
+            background-color: #f0f4f8;
+            border-top: 1px solid #e0e0e0;
+            overflow: hidden;
+            white-space: nowrap;
+            padding: 8px 0;
+            flex-shrink: 0;
+        }
+
+        .ticker-text {
+            display: inline-block;
+            padding-left: 100%;
+            animation: marquee 22s linear infinite;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #0d2836;
+        }
+
+        @keyframes marquee {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(-100%, 0); }
+        }
+
+        /* ============ CONSOLA DJ (OCULTA) ============ */
+        .console-panel {
+            display: none;
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            max-height: 94%;
+            background-color: #04212e;
+            border-top: 3px solid #00d4ff;
+            border-radius: 16px 16px 0 0;
+            z-index: 50;
+            padding: 14px 16px 20px;
+            overflow-y: auto;
+            box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+        }
+
+        .console-panel.active {
+            display: block;
+            animation: consoleUp 0.25s ease-out;
+        }
+
+        @keyframes consoleUp {
+            from { transform: translateY(40px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .console-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #00d4ff;
+            font-weight: 800;
+            font-size: 0.95rem;
+            margin-bottom: 8px;
+        }
+
+        .console-close {
+            background: none;
+            border: none;
+            color: #ffffff;
+            font-size: 1.1rem;
+            cursor: pointer;
+        }
+
+        .console-status {
+            font-size: 0.75rem;
+            color: #8fc7dd;
+            margin-bottom: 10px;
+            padding: 6px 10px;
+            background-color: rgba(255,255,255,0.06);
+            border-radius: 6px;
+        }
+
+        .console-btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 800;
+            cursor: pointer;
+            margin-bottom: 8px;
+            transition: transform 0.1s;
+        }
+
+        .console-btn:active { transform: scale(0.97); }
+
+        .console-btn.mic-off {
+            background-color: #d93025;
+            color: #ffffff;
+        }
+
+        .console-btn.mic-on {
+            background-color: #34a853;
+            color: #ffffff;
+        }
+
+        .console-btn.broadcast {
+            background-color: #0077c8;
+            color: #ffffff;
+        }
+
+        .console-btn.danger {
+            background-color: #5f6368;
+            color: #ffffff;
+        }
+
+        /* Botones rápidos de cambio de tema */
+        .quick-skip-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .quick-skip-btn {
+            flex: 1;
+            padding: 16px 8px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 900;
+            cursor: pointer;
+            transition: transform 0.1s, filter 0.15s;
+        }
+
+        .quick-skip-btn:active { transform: scale(0.95); }
+        .quick-skip-btn:hover { filter: brightness(1.15); }
+
+        .quick-skip-btn.prev {
+            background-color: #00a8cc;
+            color: #04212e;
+        }
+
+        .quick-skip-btn.next {
+            background-color: #34a853;
+            color: #ffffff;
+        }
+
+        .console-music {
+            margin-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.15);
+            padding-top: 10px;
+        }
+
+        .file-btn {
+            display: block;
+            text-align: center;
+            padding: 10px;
+            background-color: #00a8cc;
+            color: #04212e;
+            font-weight: 800;
+            font-size: 0.85rem;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+
+        .music-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .music-controls button {
+            background-color: rgba(255,255,255,0.12);
+            border: none;
+            color: #ffffff;
+            width: 42px;
+            height: 36px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .music-controls input[type="range"] {
+            flex-grow: 1;
+            -webkit-appearance: none;
+            height: 6px;
+            background: #0088aa;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .music-controls input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #00d4ff;
+            cursor: pointer;
+        }
+
+        .track-list {
+            max-height: 110px;
+            overflow-y: auto;
+            margin-bottom: 8px;
+        }
+
+        .track-item {
+            font-size: 0.78rem;
+            color: #cdeaf5;
+            padding: 6px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .track-item.playing {
+            background-color: rgba(0, 212, 255, 0.18);
+            color: #00d4ff;
+            font-weight: 700;
+        }
+
+        .console-listeners {
+            font-size: 0.8rem;
+            color: #8fc7dd;
+            text-align: center;
+        }
+        /* ===== DECKS DE DJ (celeste y verde) ===== */
+        .deck-hint {
+            font-size: 0.68rem;
+            color: #8fc7dd;
+            text-align: center;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .deck-btn {
+            width: 100%;
+            padding: 14px 10px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 900;
+            cursor: pointer;
+            margin-bottom: 4px;
+            line-height: 1.35;
+            transition: transform 0.1s, filter 0.15s;
+        }
+
+        .deck-btn span { font-size: 0.68rem; font-weight: 600; opacity: 0.9; }
+        .deck-btn:active { transform: scale(0.97); }
+        .deck-btn.deck-a { background-color: #00a8cc; color: #04212e; }
+        .deck-btn.deck-b { background-color: #34a853; color: #ffffff; }
+        .deck-btn.playing { outline: 3px solid #ffffff; filter: brightness(1.18); }
+
+        .deck-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .deck-mini {
+            flex: 1;
+            text-align: center;
+            padding: 8px 4px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            cursor: pointer;
+            background-color: rgba(255,255,255,0.12);
+            color: #cdeaf5;
+            border: none;
+            font-family: inherit;
+        }
+
+        .deck-mini:hover { background-color: rgba(255,255,255,0.2); }
+
+        .deck-picker {
+            display: none;
+            max-height: 110px;
+            overflow-y: auto;
+            margin-bottom: 8px;
+            background-color: rgba(255,255,255,0.05);
+            border-radius: 8px;
+        }
+
+        .deck-picker.open { display: block; }
+
+    /* Consola compacta en pantallas chicas para que se vea TODO completo */
+        @media (max-height: 780px) {
+            .console-panel { padding: 10px 12px 14px; }
+            .console-header { font-size: 0.85rem; margin-bottom: 6px; }
+            .console-status { margin-bottom: 6px; padding: 5px 8px; font-size: 0.7rem; }
+            .console-btn { padding: 9px; margin-bottom: 6px; font-size: 0.82rem; }
+            .deck-btn { padding: 10px 8px; font-size: 0.85rem; }
+            .file-btn { padding: 8px; margin-bottom: 6px; font-size: 0.78rem; }
+            .music-controls { margin-bottom: 6px; }
+            .music-controls button { height: 32px; }
+            .track-list { max-height: 64px; margin-bottom: 4px; }
+            .console-listeners { font-size: 0.72rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <!-- Navegación Superior -->
+        <div class="top-nav">
+            <div class="nav-item" id="btnListeners">
+                <span class="pulse-dot" id="navPulseDot"></span>
+                <span id="navListenerCount">0</span> OYENTES
+            </div>
+            <div class="nav-item" id="btnHistory">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"></path></svg>
+                ESCUCHADO RECIENTEMENTE
+            </div>
+        </div>
+
+        <!-- Panel Recientes -->
+        <div class="dropdown-panel" id="panelHistory">
+            <h4>Historial de Reproducción</h4>
+            <ul class="panel-list" id="historyList"></ul>
+        </div>
+
+        <!-- Logo e Información -->
+        <div class="station-header">
+            <div class="station-logo" id="displayLogo">
+                <span>FM 87.9</span>
+                ZODI
+            </div>
+            <div class="station-title" id="displayTitle">Radio Zodi FM</div>
+            <div class="station-freq" id="displayFreq">
+                87.9 FM • Gualeguaychú
+                <span class="listener-badge offline" id="listenerBadge">
+                    <span class="pulse-dot"></span>
+                    <span id="listenerCount">0</span> oyentes
+                </span>
+            </div>
+            <div class="status-badge" id="offAirBadge">📻 TRANSMISIÓN FINALIZADA (ESTÁTICA DE MADRUGADA)</div>
+            <div class="live-voice-badge" id="liveVoiceBadge">🔴 EN VIVO — VOZ DEL CONDUCTOR</div>
+        </div>
+
+        <!-- Tarjeta del Reproductor -->
+        <div class="player-card">
+            <div class="controls-bar">
+                <button class="play-btn" id="playBtn" title="Reproducir">
+                    <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
+                </button>
+                <div class="volume-box">
+                    <svg id="muteBtn" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"></path></svg>
+                    <input type="range" id="volumeControl" class="volume-slider" min="0" max="1" step="0.01" value="0.8">
+                </div>
+            </div>
+        </div>
+
+        <!-- CHAT EN TIEMPO REAL -->
+        <div class="chat-section">
+            <div class="chat-header">
+                💬 Chat en Vivo <span id="onlineIndicator">● EN LÍNEA</span>
+            </div>
+            <div class="chat-box" id="chatBox">
+                <div class="chat-msg">
+                    <span class="author">Radio Zodi:</span> ¡Bienvenidos al chat oficial de la radio! Dejá tu mensaje acá.
+                    <span class="time">00:00</span>
+                </div>
+            </div>
+            <div class="chat-inputs">
+                <div class="chat-inputs-row">
+                    <input type="text" id="chatUsername" class="chat-username" placeholder="Oyente" value="Oyente">
+                    <div class="chat-message-container">
+                        <input type="text" id="chatMessage" class="chat-message-input" placeholder="Escribir mensaje...">
+                        <button id="sendChatBtn" class="chat-send-btn">Enviar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ticker Inferior -->
+        <div class="ticker-bar">
+            <div class="ticker-text" id="tickerText">
+                📞 Se puede comunicar al número 03446 516822   •   Si está fuera del país marque: +54 03446 516822   •   📻 Transmitiendo en vivo
+            </div>
+        </div>
+
+        <!-- ============ CONSOLA DJ ============ -->
+        <div class="console-panel" id="consolePanel">
+            <div class="console-header">
+                🎛️ CONSOLA DJ — ZODI
+                <button class="console-close" id="closeConsoleBtn">✕</button>
+            </div>
+            <div class="console-status" id="consoleStatus">● Desconectado — apretá "INICIAR TRANSMISIÓN" para salir al aire.</div>
+
+            <button class="console-btn broadcast" id="startBroadcastBtn">📡 INICIAR TRANSMISIÓN (WebRTC)</button>
+            <button class="console-btn mic-off" id="micToggleBtn" disabled>🎤 Micrófono: APAGADO</button>
+
+            <div class="console-music">
+                <div class="deck-hint">🎚️ TOCA UN DECK PARA SONAR — EL OTRO SE PAUSA SOLO</div>
+
+                <button class="deck-btn deck-a" id="deckABtn">🟦 DECK CELESTE<br><span>sin tema — cargá con 📂 o 💾</span></button>
+                <div class="deck-actions">
+                    <label class="deck-mini">📂 Cargar<input type="file" id="deckAFile" accept="audio/*" hidden></label>
+                    <button class="deck-mini" id="deckASavedBtn">💾 Guardados ▼</button>
+                </div>
+                <div class="deck-picker" id="deckAPicker"></div>
+
+                <button class="deck-btn deck-b" id="deckBBtn">🟩 DECK VERDE<br><span>sin tema — cargá con 📂 o 💾</span></button>
+                <div class="deck-actions">
+                    <label class="deck-mini">📂 Cargar<input type="file" id="deckBFile" accept="audio/*" hidden></label>
+                    <button class="deck-mini" id="deckBSavedBtn">💾 Guardados ▼</button>
+                </div>
+                <div class="deck-picker" id="deckBPicker"></div>
+
+                <div class="music-controls" style="margin-top:8px;">
+                    <span style="color:#00d4ff;font-size:0.72rem;font-weight:800;flex-shrink:0;">🎚️ VOLUMEN</span>
+                    <input type="range" id="musicVol" min="0" max="1" step="0.01" value="0.8" title="Volumen música">
+                </div>
+                <div id="savedInfo" style="font-size:0.7rem;color:#8fc7dd;text-align:center;margin-top:2px;">💾 Tus temas se guardan solos en este dispositivo</div>
+                <button class="console-btn danger" id="clearTracksBtn" style="padding:8px;font-size:0.75rem;margin-top:6px;margin-bottom:0;">🗑️ BORRAR MÚSICA GUARDADA</button>
+            </div>
+
+            <div class="console-listeners">👥 Oyentes conectados en vivo: <span id="liveListeners">0</span></div>
+            <button class="console-btn danger" id="stopBroadcastBtn" style="margin-top:10px;">⛔ CERRAR TRANSMISIÓN</button>
+        </div>
+    </div>
+
+    <!-- Sin música pre-cargada: la radio solo transmite la voz y la música del conductor en vivo -->
+    <audio id="radioAudio" preload="none"></audio>
+
+    <!-- Audio del stream WebRTC en vivo -->
+    <audio id="liveAudio" autoplay playsinline></audio>
+
+    <script>
+        /* ============================================================
+           CHAT + CONTADOR — AHORA CON ENVÍO EN TIEMPO REAL VÍA WebRTC
+           ============================================================ */
+        const chatBox = document.getElementById('chatBox');
+        const chatUsername = document.getElementById('chatUsername');
+        const chatMessage = document.getElementById('chatMessage');
+        const sendChatBtn = document.getElementById('sendChatBtn');
+        const listenerCountEl = document.getElementById('listenerCount');
+        const listenerBadge = document.getElementById('listenerBadge');
+
+        // Historial compartido (los nuevos oyentes reciben los últimos mensajes)
+        window.chatHistory = [];
+
+        function obtenerHoraActual() {
+            const ahora = new Date();
+            return ahora.getHours().toString().padStart(2, '0') + ':' + ahora.getMinutes().toString().padStart(2, '0');
+        }
+
+        function agregarMensajePantalla(user, text, time) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'chat-msg';
+            msgDiv.innerHTML = `<span class="author">${user}:</span> ${text} <span class="time">${time}</span>`;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        /* ============================================================
+           CHAT GLOBAL EN TIEMPO REAL — broker MQTT público (sin Firebase,
+           sin servidor propio, sin cuentas ni claves)
+           ============================================================ */
+        const MQTT_URL = 'wss://broker.emqx.io:8084/mqtt';
+        const MQTT_TOPIC = 'radiozodi/chat/879';
+        let mqttClient = null;
+        const mensajesVistos = new Set();
+
+        function conectarChatMQTT() {
+            if (typeof mqtt === 'undefined') return;
+            try {
+                mqttClient = mqtt.connect(MQTT_URL, {
+                    clientId: 'zodi_' + Math.random().toString(16).slice(2, 10),
+                    reconnectPeriod: 5000
+                });
+                mqttClient.on('connect', () => {
+                    mqttClient.subscribe(MQTT_TOPIC);
+                    document.getElementById('onlineIndicator').textContent = '● EN LÍNEA';
+                    document.getElementById('onlineIndicator').style.color = '#28a745';
+                });
+                mqttClient.on('message', (topic, payload) => {
+                    try {
+                        const msg = JSON.parse(payload.toString());
+                        if (!msg || !msg.text || !msg.id || mensajesVistos.has(msg.id)) return;
+                        mensajesVistos.add(msg.id);
+                        agregarMensajePantalla(msg.user, msg.text, msg.time);
+                    } catch (e) {}
+                });
+                mqttClient.on('close', () => {
+                    document.getElementById('onlineIndicator').textContent = '● RECONECTANDO...';
+                    document.getElementById('onlineIndicator').style.color = '#d9534f';
+                });
+            } catch (e) {}
+        }
+        conectarChatMQTT();
+
+        function enviarMensajeUsuario() {
+            const user = chatUsername.value.trim() || 'Oyente';
+            const text = chatMessage.value.trim();
+            if (!text) return;
+            const msg = {
+                id: Math.random().toString(36).slice(2) + Date.now(),
+                user: user,
+                text: text,
+                time: obtenerHoraActual()
+            };
+            if (mqttClient && mqttClient.connected) {
+                // Se publica y TODOS lo reciben al instante (incluido vos, vuelve del broker)
+                mqttClient.publish(MQTT_TOPIC, JSON.stringify(msg));
+            } else {
+                // Sin conexión al broker: se muestra local nada más
+                agregarMensajePantalla(msg.user, msg.text, msg.time);
+            }
+            chatMessage.value = '';
+        }
+
+        sendChatBtn.addEventListener('click', enviarMensajeUsuario);
+        chatMessage.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') enviarMensajeUsuario();
+        });
+
+        /* LÓGICA DE OYENTES CON BASE EN 4566 Y CAÍDA A 0 AL APAGAR */
+        let cantidadOyentes = 4566;
+
+        function actualizarContadorOyentes() {
+            if (!window.isPlayingGlobal || window.esHorarioNocturnoGlobal()) {
+                listenerCountEl.textContent = "0";
+                listenerBadge.classList.add('offline');
+                if (navListenerCount) navListenerCount.textContent = "0";
+                if (navPulseDot) navPulseDot.style.backgroundColor = "#d93025";
+                if (navPulseDot) navPulseDot.style.animation = "none";
+                if (navPulseDot) navPulseDot.style.boxShadow = "none";
+            } else {
+                listenerBadge.classList.remove('offline');
+                const variacion = Math.floor(Math.random() * 12) - 5;
+                cantidadOyentes += variacion;
+
+                if (cantidadOyentes < 4400) cantidadOyentes = 4450;
+                if (cantidadOyentes > 4750) cantidadOyentes = 4700;
+
+                listenerCountEl.textContent = cantidadOyentes;
+                if (navListenerCount) navListenerCount.textContent = cantidadOyentes;
+                if (navPulseDot) {
+                    navPulseDot.style.backgroundColor = "#34a853";
+                    navPulseDot.style.animation = "pulse-green 1.5s infinite";
+                    navPulseDot.style.boxShadow = "0 0 0 0 rgba(52, 168, 83, 0.7)";
+                }
+            }
+
+            const proximaActualizacion = Math.floor(Math.random() * 3000) + 3000;
+            setTimeout(actualizarContadorOyentes, proximaActualizacion);
+        }
+
+        setTimeout(actualizarContadorOyentes, 1000);
+    </script>
+
+    <script>
+        const audio = document.getElementById('radioAudio');
+        const playBtn = document.getElementById('playBtn');
+        const playIcon = document.getElementById('playIcon');
+        const volumeControl = document.getElementById('volumeControl');
+        const muteBtn = document.getElementById('muteBtn');
+
+        const btnHistory = document.getElementById('btnHistory');
+        const panelHistory = document.getElementById('panelHistory');
+        const historyList = document.getElementById('historyList');
+        const navListenerCount = document.getElementById('navListenerCount');
+        const navPulseDot = document.getElementById('navPulseDot');
+
+        const offAirBadge = document.getElementById('offAirBadge');
+        const tickerText = document.getElementById('tickerText');
+        const liveVoiceBadge = document.getElementById('liveVoiceBadge');
+        const liveAudio = document.getElementById('liveAudio');
+
+        let isPlaying = false;
+        window.isPlayingGlobal = false;
+        let currentStation = 'ar';
+        let lastVolume = 0.8;
+
+        let audioCtx = null;
+        let noiseNode = null;
+        let gainNode = null;
+
+        function iniciarEstatica() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            if (noiseNode) return;
+
+            const bufferSize = audioCtx.sampleRate * 2;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const output = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = Math.random() * 2 - 1;
+            }
+
+            noiseNode = audioCtx.createBufferSource();
+            noiseNode.buffer = buffer;
+            noiseNode.loop = true;
+
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.value = 1200;
+            filter.Q.value = 0.6;
+
+            gainNode = audioCtx.createGain();
+            gainNode.gain.value = audio.volume * 0.25;
+
+            noiseNode.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            noiseNode.start();
+        }
+
+        function detenerEstatica() {
+            if (noiseNode) {
+                try {
+                    noiseNode.stop();
+                    noiseNode.disconnect();
+                } catch(e){}
+                noiseNode = null;
+            }
+        }
+
+        function esHorarioNocturno() {
+            const hora = new Date().getHours();
+            return hora >= 0 && hora < 6;
+        }
+
+        window.esHorarioNocturnoGlobal = esHorarioNocturno;
+
+        const radioData = {
+            ar: { name: "Radio Zodi 87.9 FM", logo: "<span>FM 87.9</span>ZODI", title: "Radio Zodi FM", freq: "87.9 FM • Gualeguaychú, Argentina" }
+        };
+
+        let history = JSON.parse(localStorage.getItem('zodi_history')) || ['ar'];
+
+        document.addEventListener('touchmove', (e) => {
+            if (!e.target.closest('.chat-box') && !e.target.closest('.panel-list') && !e.target.closest('.console-panel')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        function configurarMediaSession() {
+            if ('mediaSession' in navigator) {
+                const nocturno = esHorarioNocturno();
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: nocturno ? 'Radio Zodi (Estática Nocturna)' : 'Radio Zodi FM 87.9',
+                    artist: nocturno ? 'Fuera de Aire (00:00 a 06:00)' : 'Transmitiendo en Vivo',
+                    album: 'Gualeguaychú, Argentina'
+                });
+
+                navigator.mediaSession.setActionHandler('play', () => ejecutarPlay());
+                navigator.mediaSession.setActionHandler('pause', () => ejecutarPause());
+            }
+        }
+
+        audio.volume = parseFloat(volumeControl.value);
+        liveAudio.volume = parseFloat(volumeControl.value);
+
+        volumeControl.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            audio.volume = val;
+            liveAudio.volume = val;
+            if (gainNode) gainNode.gain.value = val * 0.25;
+            if (val > 0) lastVolume = val;
+        });
+
+        muteBtn.addEventListener('click', () => {
+            if (audio.volume > 0) {
+                lastVolume = audio.volume;
+                audio.volume = 0;
+                liveAudio.volume = 0;
+                volumeControl.value = 0;
+                if (gainNode) gainNode.gain.value = 0;
+            } else {
+                audio.volume = lastVolume;
+                liveAudio.volume = lastVolume;
+                volumeControl.value = lastVolume;
+                if (gainNode) gainNode.gain.value = lastVolume * 0.25;
+            }
+        });
+
+        function renderHistoryList() {
+            historyList.innerHTML = '';
+            if (history.length === 0) {
+                historyList.innerHTML = '<li class="empty-msg">No hay historial reciente.</li>';
+                return;
+            }
+            history.forEach(key => {
+                const li = document.createElement('li');
+                li.className = 'panel-item';
+                li.innerHTML = `<span>${radioData[key].name}</span>`;
+                historyList.appendChild(li);
+            });
+        }
+
+        btnHistory.addEventListener('click', (e) => {
+            e.stopPropagation();
+            panelHistory.classList.toggle('active');
+            renderHistoryList();
+        });
+
+        document.addEventListener('click', () => {
+            panelHistory.classList.remove('active');
+        });
+
+        function sincronizarConReloj() {
+            /* Si soy el conductor y estoy transmitiendo, la radio de fondo NO suena:
+               solo se escucha lo que pasa por la consola (mi voz + mi música) */
+            if (window.broadcastingActive) {
+                audio.pause();
+                detenerEstatica();
+                return;
+            }
+
+            const nocturno = esHorarioNocturno();
+
+            if (nocturno) {
+                offAirBadge.style.display = 'block';
+                tickerText.innerHTML = "📻 Radio fuera de aire de 00:00 a 06:00 hs   •   Transmisión de estática analógica   •   Regresamos a las 06:00 AM";
+                if (isPlaying) {
+                    audio.pause();
+                    iniciarEstatica();
+                }
+                return;
+            } else {
+                offAirBadge.style.display = 'none';
+                tickerText.innerHTML = "📻 Radio Zodi — programación 100% en vivo con nuestros conductores   •   📞 03446 516822   •   Si está fuera del país: +54 03446 516822";
+                detenerEstatica();
+            }
+
+            if (audio.duration && audio.duration > 0) {
+                const ahora = new Date();
+                const segundosDelDia = (ahora.getHours() * 3600) + (ahora.getMinutes() * 60) + ahora.getSeconds();
+                const inicioTransmisionSegundos = 6 * 3600; 
+
+                let segundosTranscurridos = segundosDelDia - inicioTransmisionSegundos;
+                if (segundosTranscurridos < 0) {
+                    segundosTranscurridos += 24 * 3600;
+                }
+
+                const tiempoCalculado = segundosTranscurridos % audio.duration;
+                if (Math.abs(audio.currentTime - tiempoCalculado) > 1.5) {
+                    audio.currentTime = tiempoCalculado;
+                }
+            }
+        }
+
+        function ejecutarPlay() {
+            isPlaying = true;
+            window.isPlayingGlobal = true;
+            playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path>';
+            configurarMediaSession();
+
+            // Intentar enganchar al stream en vivo del conductor (WebRTC)
+            conectarOyenteEnVivo();
+
+            if (window.broadcastingActive) {
+                // Soy el conductor: mientras transmito, solo suena la consola
+                audio.pause();
+                detenerEstatica();
+            } else if (window.musicaFondoPausadaGlobal) {
+                // Música de fondo pausada por el botón de la consola
+                audio.pause();
+                if (esHorarioNocturno()) { iniciarEstatica(); } else { detenerEstatica(); }
+            } else if (window.modoVozEnVivo) {
+                // Ya está sonando la voz en vivo del conductor
+            } else if (esHorarioNocturno()) {
+                audio.pause();
+                iniciarEstatica();
+            } else {
+                detenerEstatica();
+                sincronizarConReloj();
+                audio.play().catch(() => {});
+            }
+
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.playbackState = 'playing';
+            }
+        }
+
+        function ejecutarPause() {
+            audio.pause();
+            liveAudio.pause();
+            detenerEstatica();
+            isPlaying = false;
+            window.isPlayingGlobal = false;
+            playIcon.innerHTML = '<path d="M8 5v14l11-7z"></path>';
+
+            document.getElementById('listenerCount').textContent = "0";
+            document.getElementById('listenerBadge').classList.add('offline');
+
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.playbackState = 'paused';
+            }
+        }
+
+        playBtn.addEventListener('click', () => {
+            if (!isPlaying) {
+                ejecutarPlay();
+            } else {
+                ejecutarPause();
+            }
+        });
+
+        setInterval(sincronizarConReloj, 10000);
+
+        audio.addEventListener('loadedmetadata', sincronizarConReloj);
+        if (audio.readyState >= 1) { sincronizarConReloj(); }
+
+        audio.addEventListener('ended', () => {
+            if (isPlaying && !esHorarioNocturno() && !window.modoVozEnVivo && !window.broadcastingActive && !window.musicaFondoPausadaGlobal) {
+                sincronizarConReloj();
+                audio.play().catch(()=>{});
+            }
+        });
+
+        /* ============================================================
+           WEBRTC — MODO OYENTE (recibe voz + chat del conductor)
+           ============================================================ */
+        const ADMIN_PEER_ID = 'zodi-fm-879-admin';
+        let listenerPeer = null;
+        let listenerConn = null;
+        window.modoVozEnVivo = false;
+
+        function setModoVozEnVivo(on) {
+            window.modoVozEnVivo = on;
+            liveVoiceBadge.style.display = on ? 'inline-block' : 'none';
+            if (on) {
+                audio.pause();
+                detenerEstatica();
+            } else {
+                liveAudio.srcObject = null;
+                if (isPlaying && !window.broadcastingActive) {
+                    if (esHorarioNocturno()) {
+                        iniciarEstatica();
+                    } else {
+                        audio.play().catch(() => {});
+                    }
+                }
+            }
+        }
+
+        window.listenerEnviarChat = (msg) => {
+            if (listenerConn && listenerConn.open) {
+                try {
+                    listenerConn.send({ type: 'chat', user: msg.user, text: msg.text, time: msg.time });
+                    return true;
+                } catch (e) { return false; }
+            }
+            return false;
+        };
+
+        function conectarOyenteEnVivo() {
+            if (listenerPeer && !listenerPeer.destroyed) return;
+            try {
+                listenerPeer = new Peer({ debug: 0 });
+            } catch (e) { return; }
+
+            listenerPeer.on('open', () => {
+                listenerConn = listenerPeer.connect(ADMIN_PEER_ID, { reliable: true });
+                listenerConn.on('open', () => { try { listenerConn.send('hola'); } catch(e){} });
+                listenerConn.on('data', () => {});
+                listenerConn.on('close', () => { listenerConn = null; });
+            });
+
+            listenerPeer.on('call', (call) => {
+                call.answer(); // sin enviar stream, solo recibimos
+                call.on('stream', (stream) => {
+                    liveAudio.srcObject = stream;
+                    liveAudio.play().catch(() => {});
+                    setModoVozEnVivo(true);
+                });
+                call.on('close', () => setModoVozEnVivo(false));
+                call.on('error', () => {
+                    setModoVozEnVivo(false);
+                    try { listenerPeer.destroy(); } catch (e) {}
+                    listenerPeer = null;
+                });
+            });
+
+            listenerPeer.on('error', (err) => {
+                // El conductor no está al aire: destruimos el peer para que el
+                // reintento automático (cada 20 segundos) pueda volver a intentarlo.
+                if (err && err.type === 'peer-unavailable') {
+                    try { listenerPeer.destroy(); } catch (e) {}
+                    listenerPeer = null;
+                    listenerConn = null;
+                }
+            });
+
+            // Reintento periódico mientras suene la radio
+            setInterval(() => {
+                if (isPlaying && !window.modoVozEnVivo && !window.broadcastingActive && (!listenerPeer || listenerPeer.destroyed)) {
+                    conectarOyenteEnVivo();
+                }
+            }, 20000);
+        }
+    </script>
+
+    <script>
+        /* ============================================================
+           CONSOLA DJ — ACCESO OCULTO CON CLAVE + WEBRTC CONDUCTOR
+           ============================================================ */
+        const CLAVE_CONSOLA = '1212';
+        const displayLogo = document.getElementById('displayLogo');
+        const consolePanel = document.getElementById('consolePanel');
+        const consoleStatus = document.getElementById('consoleStatus');
+        const liveListenersEl = document.getElementById('liveListeners');
+
+        /* --- Apertura oculta: 5 toques seguidos en el logo --- */
+        let toquesLogo = 0;
+        let temporizadorToques = null;
+
+        displayLogo.addEventListener('click', () => {
+            toquesLogo++;
+            clearTimeout(temporizadorToques);
+            temporizadorToques = setTimeout(() => { toquesLogo = 0; }, 2000);
+
+            if (toquesLogo >= 5) {
+                toquesLogo = 0;
+                const ingresada = prompt('🔐 Ingrese la clave de conductor:');
+                if (ingresada === CLAVE_CONSOLA) {
+                    consolePanel.classList.add('active');
+                } else if (ingresada !== null) {
+                    alert('❌ Clave incorrecta');
+                }
+            }
+        });
+
+        document.getElementById('closeConsoleBtn').addEventListener('click', () => {
+            consolePanel.classList.remove('active');
+        });
+
+        /* --- Estado del conductor --- */
+        let adminPeer = null;
+        let adminCtx = null;
+        let adminDest = null;
+        let micStream = null;
+        let micSourceNode = null;
+        let micBoostNode = null;
+        let micCompNode = null;
+        let musicGainNode = null;
+        let broadcasting = false;
+        let micActivo = false;
+        const oyentesVivos = new Map();   // peerId -> media call
+        const connsDatos = new Set();     // conexiones de datos (chat)
+
+        window.broadcastingActive = false;
+        // SIN música de fondo: la radio solo suena cuando el conductor transmite.
+        // Este flag queda fijo en true para que ningún camino intente reproducir la radio.
+        window.musicaFondoPausadaGlobal = true;
+
+        function setStatus(txt) { consoleStatus.textContent = txt; }
+        function actualizarOyentesVivos() { liveListenersEl.textContent = oyentesVivos.size; }
+
+        /* Reenvío de chat del conductor a todos los oyentes (excepto al que lo mandó) */
+        window.adminReenviarChat = (msg, excluir) => {
+            const paquete = { type: 'chat', user: msg.user, text: msg.text, time: msg.time };
+            connsDatos.forEach((c) => {
+                if (c !== excluir && c.open) { try { c.send(paquete); } catch (e) {} }
+            });
+        };
+
+        /* --- 1) Iniciar / detener la transmisión WebRTC --- */
+        const startBroadcastBtn = document.getElementById('startBroadcastBtn');
+        const stopBroadcastBtn = document.getElementById('stopBroadcastBtn');
+        const micToggleBtn = document.getElementById('micToggleBtn');
+
+        startBroadcastBtn.addEventListener('click', async () => {
+            if (broadcasting) return;
+            try {
+                setStatus('⏳ Conectando al broker WebRTC...');
+                adminCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (adminCtx.state === 'suspended') await adminCtx.resume();
+
+                // Destino común: micrófono + música se mezclan acá
+                adminDest = adminCtx.createMediaStreamDestination();
+
+                // ===== CLAVE: desactivar el procesamiento de voz que arruina la música =====
+                // (cancelación de eco + supresión de ruido generaban el "chillido" en la música)
+                adminDest.stream.getAudioTracks().forEach((track) => {
+                    track.applyConstraints({
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }).catch(() => {});
+                });
+
+                // ===== MÚSICA: conectar los dos decks (celeste y verde) =====
+                musicGainNode = adminCtx.createGain();
+                musicGainNode.gain.value = parseFloat(document.getElementById('musicVol').value);
+                musicGainNode.connect(adminDest);
+                musicGainNode.connect(adminCtx.destination); // monitoreo local (usá auriculares 🎧)
+                conectarDeck('A');
+                conectarDeck('B');
+
+                adminPeer = new Peer(ADMIN_PEER_ID, { debug: 0 });
+
+                adminPeer.on('open', (id) => {
+                    broadcasting = true;
+                    window.broadcastingActive = true;
+                    setStatus('● EN LÍNEA como "' + id + '" — los oyentes que aprieten Play te escucharán. Usá auriculares 🎧');
+                    startBroadcastBtn.disabled = true;
+                    micToggleBtn.disabled = false;
+                    // Solo suena tu consola (voz + tu música). La radio no tiene pista propia.
+                });
+
+                adminPeer.on('connection', (conn) => {
+                    // IMPORTANTE: si conn.open ya es true, el evento 'open' ya pasó y no vuelve a disparar.
+                    // Por eso verificamos de las dos formas: así la llamada de audio SIEMPRE se hace.
+                    const prepararOyente = () => {
+                        if (connsDatos.has(conn)) return;
+                        connsDatos.add(conn);
+
+                        // Llamada de audio al oyente (tu voz + tu música viajan por acá)
+                        const call = adminPeer.call(conn.peer, adminDest.stream);
+                        if (call) {
+                            oyentesVivos.set(conn.peer, call);
+                            actualizarOyentesVivos();
+                            setStatus('🔴 Oyente conectado — ' + oyentesVivos.size + ' en vivo. Tu voz se está transmitiendo.');
+                            call.on('close', () => {
+                                oyentesVivos.delete(conn.peer);
+                                actualizarOyentesVivos();
+                                setStatus('● Un oyente se desconectó — ' + oyentesVivos.size + ' en vivo.');
+                            });
+                        }
+
+                    };
+
+                    if (conn.open) {
+                        prepararOyente();
+                    } else {
+                        conn.on('open', prepararOyente);
+                    }
+
+                    conn.on('data', () => {});
+
+                    conn.on('close', () => {
+                        connsDatos.delete(conn);
+                        oyentesVivos.delete(conn.peer);
+                        actualizarOyentesVivos();
+                    });
+                });
+
+                adminPeer.on('error', (err) => {
+                    if (err.type === 'unavailable-id') {
+                        setStatus('⚠️ Ya hay otro conductor usando este canal. Cerrá la otra pestaña.');
+                    } else {
+                        setStatus('⚠️ Error WebRTC: ' + err.type);
+                    }
+                });
+            } catch (e) {
+                setStatus('⚠️ No se pudo iniciar: ' + e.message);
+            }
+        });
+
+        stopBroadcastBtn.addEventListener('click', () => {
+            if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+            ['A', 'B'].forEach((l) => { const d = decks[l]; if (d.el) d.el.pause(); d.playing = false; });
+            actualizarBotonesDecks();
+            if (adminPeer) { adminPeer.destroy(); adminPeer = null; }
+            oyentesVivos.clear();
+            connsDatos.clear();
+            actualizarOyentesVivos();
+            broadcasting = false;
+            micActivo = false;
+            window.broadcastingActive = false;
+            micToggleBtn.disabled = true;
+            micToggleBtn.className = 'console-btn mic-off';
+            micToggleBtn.textContent = '🎤 Micrófono: APAGADO';
+            startBroadcastBtn.disabled = false;
+            setStatus('● Transmisión cerrada. Los oyentes vuelven a la radio normal.');
+        });
+
+        /* --- 2) Micrófono del conductor (con compresor profesional + refuerzo) --- */
+        micToggleBtn.addEventListener('click', async () => {
+            if (!broadcasting) return;
+            if (micActivo) {
+                micStream.getTracks().forEach(t => t.stop());
+                micSourceNode.disconnect();
+                micStream = null;
+                micActivo = false;
+                micToggleBtn.className = 'console-btn mic-off';
+                micToggleBtn.textContent = '🎤 Micrófono: APAGADO';
+                setStatus('● En línea — micrófono apagado (suena solo la música).');
+            } else {
+                try {
+                    micStream = await navigator.mediaDevices.getUserMedia({
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                    });
+                    micSourceNode = adminCtx.createMediaStreamSource(micStream);
+
+                    // ===== CADENA DE VOZ PROFESIONAL =====
+                    // Refuerzo de ganancia (voz más alta) + compresor (sonido parejo, de radio)
+                    micBoostNode = adminCtx.createGain();
+                    micBoostNode.gain.value = 1.8;
+
+                    micCompNode = adminCtx.createDynamicsCompressor();
+                    micCompNode.threshold.value = -18;
+                    micCompNode.knee.value = 12;
+                    micCompNode.ratio.value = 4;
+                    micCompNode.attack.value = 0.003;
+                    micCompNode.release.value = 0.2;
+
+                    micSourceNode.connect(micBoostNode);
+                    micBoostNode.connect(micCompNode);
+                    micCompNode.connect(adminDest);
+
+                    micActivo = true;
+                    micToggleBtn.className = 'console-btn mic-on';
+                    micToggleBtn.textContent = '🎤 Micrófono: PRENDIDO 🔴';
+                    setStatus('🔴 AL AIRE — tu voz se transmite a ' + oyentesVivos.size + ' oyente(s).');
+                } catch (e) {
+                    setStatus('⚠️ No se pudo acceder al micrófono (¿HTTPS y permiso concedido?).');
+                }
+            }
+        });
+
+        /* ===== IndexedDB: la música cargada queda guardada en el dispositivo ===== */
+        const DB_NAME = 'zodi-musica';
+        const STORE_NAME = 'temas';
+        let db = null;
+
+        function abrirDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = (e) => {
+                    e.target.result.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function guardarTema(nombre, blob) {
+            try {
+                if (!db) db = await abrirDB();
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, 'readwrite');
+                    tx.objectStore(STORE_NAME).add({ nombre: nombre, blob: blob, fecha: Date.now() });
+                    tx.oncomplete = resolve;
+                    tx.onerror = () => reject(tx.error);
+                });
+            } catch (e) {}
+        }
+
+        async function borrarTemasGuardados() {
+            if (!db) db = await abrirDB();
+            await new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                tx.objectStore(STORE_NAME).clear();
+                tx.oncomplete = resolve;
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        /* ============================================================
+           3) MÚSICA: DOS DECKS DE DJ (celeste y verde)
+           - Cada deck tiene SU tema cargado
+           - Tocar un deck: suena ese tema y PAUSA el otro solo
+           - Los temas cargados quedan guardados en el dispositivo
+           ============================================================ */
+        const decks = {
+            A: { el: new Audio(), nombre: '', url: null, playing: false, conectado: false },
+            B: { el: new Audio(), nombre: '', url: null, playing: false, conectado: false }
+        };
+        let temasGuardadosLista = [];
+
+        ['A', 'B'].forEach((letra) => {
+            decks[letra].el.addEventListener('ended', () => {
+                decks[letra].playing = false;
+                actualizarBotonesDecks();
+            });
+        });
+
+        function conectarDeck(letra) {
+            const d = decks[letra];
+            if (d.conectado || !adminCtx || !musicGainNode) return;
+            adminCtx.createMediaElementSource(d.el).connect(musicGainNode);
+            d.conectado = true;
+        }
+
+        function actualizarBotonesDecks() {
+            const btnA = document.getElementById('deckABtn');
+            const btnB = document.getElementById('deckBBtn');
+            btnA.classList.toggle('playing', decks.A.playing);
+            btnB.classList.toggle('playing', decks.B.playing);
+            const txtA = decks.A.nombre ? ((decks.A.playing ? '🔊 SONANDO: ' : '▶️ ') + decks.A.nombre) : 'sin tema — cargá con 📂 o 💾';
+            const txtB = decks.B.nombre ? ((decks.B.playing ? '🔊 SONANDO: ' : '▶️ ') + decks.B.nombre) : 'sin tema — cargá con 📂 o 💾';
+            btnA.innerHTML = '🟦 DECK CELESTE<br><span>' + txtA + '</span>';
+            btnB.innerHTML = '🟩 DECK VERDE<br><span>' + txtB + '</span>';
+        }
+
+        function cargarTemaEnDeck(letra, nombre, blobOrUrl) {
+            const d = decks[letra];
+            if (d.playing) { d.el.pause(); d.playing = false; }
+            d.url = (typeof blobOrUrl === 'string') ? blobOrUrl : URL.createObjectURL(blobOrUrl);
+            d.nombre = nombre;
+            d.el.src = d.url;
+            actualizarBotonesDecks();
+        }
+
+        function activarDeck(letra) {
+            const d = decks[letra];
+            const otra = letra === 'A' ? 'B' : 'A';
+            if (!d.nombre) {
+                setStatus('⚠️ Deck ' + (letra === 'A' ? 'CELESTE 🟦' : 'VERDE 🟩') + ': cargá un tema primero con 📂 o elegí de 💾');
+                return;
+            }
+            if (d.playing) {
+                // Segundo toque = pausar ese deck
+                d.el.pause();
+                d.playing = false;
+            } else {
+                // Sonar este deck y PAUSAR el otro automáticamente
+                if (decks[otra].playing) { decks[otra].el.pause(); decks[otra].playing = false; }
+                d.el.play().catch(() => {});
+                d.playing = true;
+                if (broadcasting) setStatus('🎵 Deck ' + (letra === 'A' ? 'CELESTE 🟦' : 'VERDE 🟩') + ': ' + d.nombre);
+            }
+            actualizarBotonesDecks();
+        }
+
+        document.getElementById('deckABtn').addEventListener('click', () => activarDeck('A'));
+        document.getElementById('deckBBtn').addEventListener('click', () => activarDeck('B'));
+
+        // Cargar un archivo nuevo en un deck (y guardarlo en el dispositivo)
+        function conectarInputDeck(letra, inputId) {
+            document.getElementById(inputId).addEventListener('change', async (e) => {
+                const f = e.target.files[0];
+                if (!f) return;
+                cargarTemaEnDeck(letra, f.name, f);
+                try { await guardarTema(f.name, f); } catch (err) {}
+                await recargarGuardados();
+                setStatus('💾 "' + f.name + '" listo en el Deck ' + (letra === 'A' ? 'CELESTE 🟦' : 'VERDE 🟩') + ' — apretá el deck para sonarlo.');
+                e.target.value = '';
+            });
+        }
+        conectarInputDeck('A', 'deckAFile');
+        conectarInputDeck('B', 'deckBFile');
+
+        // Temas guardados en el dispositivo (IndexedDB)
+        async function recargarGuardados() {
+            try {
+                if (!db) db = await abrirDB();
+                temasGuardadosLista = await new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, 'readonly');
+                    const req = tx.objectStore(STORE_NAME).getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => reject(req.error);
+                });
+                temasGuardadosLista.sort((a, b) => (a.fecha || 0) - (b.fecha || 0));
+                actualizarInfoGuardado();
+            } catch (e) {}
+        }
+
+        function armarPicker(letra) {
+            const picker = document.getElementById('deck' + letra + 'Picker');
+            picker.innerHTML = '';
+            if (!temasGuardadosLista.length) {
+                picker.innerHTML = '<div class="track-item" style="cursor:default;">No hay temas guardados — cargá con 📂 primero</div>';
+                return;
+            }
+            temasGuardadosLista.forEach((t) => {
+                const div = document.createElement('div');
+                div.className = 'track-item';
+                div.textContent = '💾 ' + t.nombre;
+                div.addEventListener('click', () => {
+                    cargarTemaEnDeck(letra, t.nombre, t.blob);
+                    picker.classList.remove('open');
+                    setStatus('💾 "' + t.nombre + '" va al Deck ' + (letra === 'A' ? 'CELESTE 🟦' : 'VERDE 🟩') + ' — apretá el deck para sonarlo.');
+                });
+                picker.appendChild(div);
+            });
+        }
+
+        document.getElementById('deckASavedBtn').addEventListener('click', async () => {
+            await recargarGuardados();
+            armarPicker('A');
+            document.getElementById('deckAPicker').classList.toggle('open');
+        });
+        document.getElementById('deckBSavedBtn').addEventListener('click', async () => {
+            await recargarGuardados();
+            armarPicker('B');
+            document.getElementById('deckBPicker').classList.toggle('open');
+        });
+
+        async function restaurarTemasGuardados() {
+            await recargarGuardados();
+            if (temasGuardadosLista.length > 0) {
+                setStatus('💾 Tienes ' + temasGuardadosLista.length + ' tema(s) guardado(s) — usá "💾 Guardados ▼" para mandarlos a un deck.');
+            }
+        }
+        restaurarTemasGuardados();
+
+        function actualizarInfoGuardado() {
+            const info = document.getElementById('savedInfo');
+            if (info) info.textContent = '💾 ' + temasGuardadosLista.length + ' tema(s) guardado(s) en este dispositivo';
+        }
+
+        // Borrar toda la música guardada
+        document.getElementById('clearTracksBtn').addEventListener('click', async () => {
+            if (!confirm('¿Borrar toda la música guardada de este dispositivo?')) return;
+            try { await borrarTemasGuardados(); } catch (e) {}
+            await recargarGuardados();
+            setStatus('🗑️ Música guardada borrada.');
+        });
+
+        // Volumen general de la música
+        document.getElementById('musicVol').addEventListener('input', (e) => {
+            if (musicGainNode) musicGainNode.gain.value = parseFloat(e.target.value);
+        });
+    </script>
+</body>
+</html>
